@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AR Indoor Navigator</string>
+    <string name="btn_start_recording">Start Recording</string>
+    <string name="btn_save_waypoint">Save Waypoint</string>
+    <string name="btn_start_navigation">Start Navigation</string>
+</resources>

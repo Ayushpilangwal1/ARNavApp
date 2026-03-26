@@ -1,0 +1,15 @@
+R_DEF: Internal format may change without notice
+local
+id btnSaveWaypoint
+id btnStartNavigation
+id btnStartRecording
+id surfaceView
+id tvPosition
+id tvStatus
+id tvWaypointCount
+layout activity_main
+string app_name
+string btn_save_waypoint
+string btn_start_navigation
+string btn_start_recording
+style Theme.ARNavApp
