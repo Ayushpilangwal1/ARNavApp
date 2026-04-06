@@ -17,6 +17,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.google.ar.core.Anchor;
+import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
 import com.google.ar.core.TrackingState;
 
@@ -30,6 +31,7 @@ public class MainActivity extends AppCompatActivity
         WaypointManager.WaypointListener,
         NavigationEngine.NavigationListener,
         AudioManager.AudioReadyListener,
+        CameraController.CameraControllerListener,
         GLSurfaceView.Renderer {
 
     private static final String TAG = "MainActivity";
@@ -40,6 +42,7 @@ public class MainActivity extends AppCompatActivity
     private WaypointManager waypointManager;
     private NavigationEngine navigationEngine;
     private AudioManager audioManager;
+    private CameraController cameraController;
 
     // UI
     private GLSurfaceView surfaceView;
@@ -56,7 +59,7 @@ public class MainActivity extends AppCompatActivity
     private TrackingState lastTrackingState = TrackingState.STOPPED;
 
     private boolean arSessionReady = false;
-    private int backgroundTextureId = -1;
+    private BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,6 +78,10 @@ public class MainActivity extends AppCompatActivity
         waypointManager = new WaypointManager(this);
         navigationEngine= new NavigationEngine(this);
         arCoreManager   = new ARCoreManager(this);
+        cameraController = new CameraController(this, arCoreManager, waypointManager, audioManager, this);
+        
+        // Set up camera touch listener for waypoint marking
+        surfaceView.setOnTouchListener(cameraController);
 
         setupButtonListeners();
         setStatus("Checking camera permission...");
@@ -101,6 +108,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (cameraController != null) cameraController.resetWaypointMarking();
         if (arCoreManager != null) arCoreManager.destroy();
         if (audioManager != null)  audioManager.shutdown();
     }
@@ -137,6 +145,7 @@ public class MainActivity extends AppCompatActivity
             if (appState == AppState.RECORDING) {
                 // STOP RECORDING
                 appState = AppState.IDLE;
+                cameraController.stopCameraTracking();
                 audioManager.speak("Recording stopped. Ready to navigate.");
                 updateUI();
             } else {
@@ -144,6 +153,7 @@ public class MainActivity extends AppCompatActivity
                 if (navigationEngine.isNavigating()) navigationEngine.stopNavigation();
                 waypointManager.clearWaypoints();
                 appState = AppState.RECORDING;
+                cameraController.startCameraTracking();
                 audioManager.announceRecordingStarted();
                 updateUI();
             }
@@ -245,6 +255,34 @@ public class MainActivity extends AppCompatActivity
     @Override public void onAudioReady() { }
     @Override public void onAudioError(String message) { runOnUiThread(() -> showToast("Audio: " + message)); }
 
+    // ─── CameraController Listener Implementations ───
+    @Override
+    public void onWaypointMarked(float[] position) {
+        runOnUiThread(() -> {
+            setStatus("Waypoint marked at: X=" + String.format("%.2f", position[0]) +
+                    " Y=" + String.format("%.2f", position[1]) +
+                    " Z=" + String.format("%.2f", position[2]));
+        });
+    }
+
+    @Override
+    public void onWaypointConfirmed(Waypoint waypoint) {
+        runOnUiThread(() -> {
+            setStatus("Waypoint confirmed: " + waypoint.getLabel());
+        });
+    }
+
+    @Override
+    public void onCameraStatusChanged(String status) {
+        runOnUiThread(() -> setStatus(status));
+    }
+
+    @Override
+    public void onTapFeedback(float x, float y) {
+        // Visual feedback - could add a marker or animation at tap location
+        Log.d(TAG, "Tap feedback at: " + x + ", " + y);
+    }
+
     private boolean hasCameraPermission() {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
     }
@@ -294,11 +332,8 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         GLES20.glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        int[] textures = new int[1];
-        GLES20.glGenTextures(1, textures, 0);
-        backgroundTextureId = textures[0];
-        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, backgroundTextureId);
-        arCoreManager.setCameraTextureName(backgroundTextureId);
+        backgroundRenderer.createOnGlThread(this);
+        arCoreManager.setCameraTextureName(backgroundRenderer.getTextureId());
     }
 
     @Override
@@ -313,6 +348,10 @@ public class MainActivity extends AppCompatActivity
         if (!arSessionReady) return;
 
         arCoreManager.update();
+        Frame frame = arCoreManager.getCurrentFrame();
+        if (frame != null) {
+            backgroundRenderer.draw(frame);
+        }
 
         Pose pose = arCoreManager.getCurrentPose();
         if (pose != null) {

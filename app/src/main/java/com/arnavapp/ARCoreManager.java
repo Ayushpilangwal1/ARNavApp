@@ -29,6 +29,10 @@ public class ARCoreManager {
     private boolean sessionInitialized = false;
     private boolean installRequested = false;
 
+    private int cameraTextureId = -1;
+    private int displayWidth = -1;
+    private int displayHeight = -1;
+
     public interface ARCoreListener {
         void onTrackingStateChanged(TrackingState state);
         void onSessionError(String errorMessage);
@@ -57,6 +61,14 @@ public class ARCoreManager {
             session.configure(config);
 
             sessionInitialized = true;
+
+            if (cameraTextureId != -1) {
+                session.setCameraTextureName(cameraTextureId);
+            }
+            if (displayWidth != -1 && displayHeight != -1) {
+                session.setDisplayGeometry(Surface.ROTATION_0, displayWidth, displayHeight);
+            }
+
             return true;
 
         } catch (UnavailableArcoreNotInstalledException e) {
@@ -74,12 +86,15 @@ public class ARCoreManager {
     }
 
     public void setCameraTextureName(int textureId) {
+        cameraTextureId = textureId;
         if (session != null) {
             session.setCameraTextureName(textureId);
         }
     }
 
     public void setDisplayGeometry(GL10 gl, int width, int height) {
+        displayWidth = width;
+        displayHeight = height;
         if (session != null) {
             session.setDisplayGeometry(Surface.ROTATION_0, width, height);
         }
@@ -105,6 +120,10 @@ public class ARCoreManager {
         Camera camera = currentFrame.getCamera();
         if (camera.getTrackingState() != TrackingState.TRACKING) return null;
         return camera.getPose();
+    }
+
+    public Frame getCurrentFrame() {
+        return currentFrame;
     }
 
     /** Returns current x,y,z in metres */
